@@ -1,0 +1,7 @@
+{
+    "name": "Portfolio Drilldown Report",
+    "className": "portfolio-drilldown-report",
+    "server": "https://rally1.rallydev.com/",
+    "sdk": "2.0",
+    "apiKey": "_PUT_APIKEY_HERE_"
+}

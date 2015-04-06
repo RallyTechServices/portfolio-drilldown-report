@@ -1,0 +1,993 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Portfolio Drilldown Report</title>
+    <!--  (c) 2015 Rally Software Development Corp.  All Rights Reserved. -->
+    <!--  Build Date: Sun Apr 05 2015 21:44:07 GMT-0600 (MDT) -->
+    
+    <script type="text/javascript">
+        var APP_BUILD_DATE = "Sun Apr 05 2015 21:44:07 GMT-0600 (MDT)";
+        var CHECKSUM = 25145688359;
+    </script>
+    
+    <script type="text/javascript" src="/apps/2.0/sdk.js"></script>
+
+    <script type="text/javascript">
+        Rally.onReady(function() {
+             
+/**
+ * A link that pops up a version dialog box
+ */
+
+Ext.define('Rally.technicalservices.InfoLink',{
+    extend: 'Ext.Component',
+    alias: 'widget.tsinfolink',
+    
+    /**
+     * @cfg {String} informationHtml
+     * Additional text to be displayed on the popup dialog (for exmaple,
+     * to add a description of the app's use or functionality)
+     */
+    informationHtml: null,
+    
+    /**
+     * 
+     * cfg {String} title
+     * The title for the dialog box
+     */
+     title: "Build Information",
+    
+    renderTpl: "<div id='{id}-infolinkWrap' class='tsinfolink'>i</div>",
+
+    initComponent: function() {
+        this.callParent(arguments);
+       
+    },
+    
+    onRender: function() {
+        this.callParent(arguments);
+        this.mon(this.el,'click',this.onClick,this);
+    },
+    _generateChecksum: function(string){
+        var chk = 0x12345678,
+            i;
+        string = string.replace(/var CHECKSUM = .*;/,"");
+        string = string.replace(/\s/g,"");  //Remove all whitespace from the string.
+        
+        for (i = 0; i < string.length; i++) {
+            chk += (string.charCodeAt(i) * i);
+        }
+    
+        return chk;
+    },
+    _checkChecksum: function(container) {
+        var me = this;
+        Ext.Ajax.request({
+            url: document.URL,
+            params: {
+                id: 1
+            },
+            success: function (response) {
+                text = response.responseText;
+                if ( CHECKSUM ) {
+                    if ( CHECKSUM !== me._generateChecksum(text) ) {
+                        console.log("Checksums don't match!");
+                        if ( me.dialog ) {
+                            me.dialog.add({xtype:'container',html:'Checksums do not match'});
+                        }
+                    }
+                }
+            }
+        });
+    },
+    onClick: function(e) {
+        var me = this;
+        this._checkChecksum(this);
+        
+        var dialog_items = [];
+        
+        if ( this.informationHtml ) {
+            dialog_items.push({
+                xtype:'container',
+                html: this.informationHtml
+            });
+        }
+                
+        dialog_items.push({
+            xtype:'container',
+            html:"This app was created by the Rally Technical Services Team."
+        });
+        
+        if ( APP_BUILD_DATE ) {
+            dialog_items.push({
+                xtype:'container',
+                html:'Build date/time: ' + APP_BUILD_DATE
+            });
+        }
+        
+        if (this.dialog){this.dialog.destroy();}
+        this.dialog = Ext.create('Rally.ui.dialog.Dialog',{
+            defaults: { padding: 5, margin: 5 },
+            closable: true,
+            draggable: true,
+            title: me.title,
+            items: dialog_items
+        });
+        this.dialog.show();
+    }
+});
+
+/*
+ */
+Ext.define('Rally.technicalservices.Logger',{
+    constructor: function(config){
+        Ext.apply(this,config);
+    },
+    log: function(args){
+        var timestamp = "[ " + Ext.util.Format.date(new Date(), "Y-m-d H:i:s.u") + " ]";
+        //var output_args = arguments;
+        //output_args.unshift( [ "[ " + timestamp + " ]" ] );
+        //output_args = Ext.Array.push(output_args,arguments);
+        
+        var output_args = [];
+        output_args = Ext.Array.push(output_args,[timestamp]);
+        output_args = Ext.Array.push(output_args, Ext.Array.slice(arguments,0));
+
+        window.console && console.log.apply(console,output_args);
+    }
+
+});
+
+Ext.define('Rally.technicalservices.util.Excel',{
+    singleton: true,
+    formatCell: function(data){
+        var str = '<td></td>';
+        if (data){
+            str = Ext.String.format('<td align="top">{0}</td>',data);
+        }
+        console.log(str);
+        return str;
+    },
+    formatArrayAsRow: function(array){
+        var text = '';
+        Ext.each(array, function(a){
+            text += Rally.technicalservices.util.Excel.formatCell(Rally.technicalservices.util.String.stripParagraphTags(a));
+        });
+        text = Rally.technicalservices.util.Excel.formatRow(text);
+        return text;
+    },
+    formatRow: function(cells){
+        return Ext.String.format('<tr>{0}</tr>',cells);
+    },
+    formatTable: function(rows){
+        return Ext.String.format('<table>{0}</table>',rows);
+    },
+    formatBody: function(html){
+        return Ext.String.format('<body>{0}</body>',html);
+    },
+    formatHtml: function(body){
+        return '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">' +
+        '<head>' +
+        '<meta http-equiv=Content-Type content="application/vnd.ms-excel"/>' + //"text/html;charset=windows-1252">' +
+        '<meta name=ProgId content=Excel.Sheet/>' +
+    //    '<meta name=Generator content="Microsoft Excel 11">' +
+        '<style>br {mso-data-placement: same-cell;} p {mso-data-placement: same-cell;}</style>' +
+            '</head>' + body + '</html>';
+    }
+
+});
+
+Ext.define('Rally.technicalservices.util.String',{
+    singleton: true,
+    stripHTML: function(oldString) {
+        if (!oldString) {
+            return '';
+        }
+
+        var newString = oldString.replace(/(<([^>]+)>)/ig, "");
+        newString = escape(newString);
+        newString = newString.replace("/%0D%0A/g", " ");
+        newString = newString.replace("/%0A/g", " ");
+        newString = newString.replace("/%0D/g", " ");
+        newString = unescape(newString);
+        newString = Rally.util.String.consolidateSpaces(newString);
+
+        return newString;
+    },
+    stripParagraphTags: function(oldString){
+        if (!oldString) {
+            return;
+        }
+
+        var newString = oldString.replace(/<p[^>]*>/g, '').replace(/<\/p>/g, '<br />'); // style="mso-data-placement:same-cell;" /> ');
+        var newString = newString.replace(/<ul[^>]*>/g, '').replace(/<\/ul>/g, '<br />');
+        var newString = newString.replace(/<li[^>]*>/g, '').replace(/<\/li>/g, '<br />');
+        var newString = newString.replace(/<ol[^>]*>/g, '').replace(/<\/ol>/g, '<br />');
+
+        var newString = newString.replace(/<a[^>]*>/g, '').replace(/<\/a>/g, '');
+
+        newString = escape(newString);
+        newString = newString.replace("/%0D%0A/g", " ");
+        newString = newString.replace("/%0A/g", " ");
+        newString = newString.replace("/%0D/g", " ");
+        newString = unescape(newString);
+        newString = Rally.util.String.consolidateSpaces(newString);
+
+        return newString;
+
+    },
+    consolidateSpaces: function (inputString) {
+        if (!Ext.isString(inputString)) {
+            return inputString;
+        }
+
+        var retValue = Ext.String.trim(inputString);
+
+        return retValue.replace(/( )+/g, ' ');
+    },
+    getText: function(html) {
+        var value = '';
+        try {
+            var span = document.createElement('span');
+            span.innerHTML = html;
+            value = span.textContent || span.innerText;
+        } catch (e) { }
+        return !value ? '' : value;
+    }
+});
+Ext.define('Rally.technicalservices.Export',{
+    singleton: true,
+    exportDetail: function(filename, grid){
+        var root = grid.store.getRootNode();
+        var columnsOfInterest = _.map(grid.columnCfgs, function(cfg){
+            if (typeof cfg == 'object'){
+                return cfg.dataIndex;
+            }
+            return cfg;
+        });
+        columnsOfInterest = _.without(columnsOfInterest,'FormattedID');
+
+        //We want the first child of the root node, plus its' children
+        this._exportNodeDetail(root,columnsOfInterest, filename);
+
+    },
+    _exportNodeDetail: function(expandedNode,columnsOfInterest,filename){
+        var nodeDepth = Rally.technicalservices.Export._getDeepestNodeDepth(expandedNode);
+        var nameIndex = nodeDepth;
+
+        var headers = [];
+        for (var i=0; i<nodeDepth; i++){
+            headers.push('');
+        }
+        headers[0] = 'Initiative';
+        headers[1] = 'Feature';
+        headers.push(columnsOfInterest);
+        headers = _.flatten(headers);
+        var rows = Rally.technicalservices.util.Excel.formatArrayAsRow(headers);
+
+
+        Ext.each(expandedNode.childNodes, function (firstLevelNode) {
+            var arr = Rally.technicalservices.Export._initializeArray(firstLevelNode.getDepth(), nameIndex, firstLevelNode.data.FormattedID);
+            Ext.each(columnsOfInterest, function(col){
+                arr.push(firstLevelNode.data[col]);
+            });
+            rows += Rally.technicalservices.util.Excel.formatArrayAsRow(_.flatten(arr));
+            rows += Rally.technicalservices.Export._getChildNodeRows(true, firstLevelNode, nameIndex, columnsOfInterest);
+        });
+        var table = Rally.technicalservices.util.Excel.formatTable(rows);
+        var text = Rally.technicalservices.util.Excel.formatHtml(Rally.technicalservices.util.Excel.formatBody(table));
+        Rally.technicalservices.FileUtilities.saveTextAsFile(text,filename);
+    },
+
+    _getChildNodeRows: function(recursive, parentNode, columnIndex, columnsOfInterest){
+        console.log('_getChildNodeRows',parentNode, parentNode.data.FormattedID, parentNode.hasChildNodes(), parentNode.childNodes);
+        var depth = parentNode.getDepth();
+        var text = '';
+        Ext.each(parentNode.childNodes, function(childNode){
+                var arr = Rally.technicalservices.Export._initializeArray(childNode.getDepth(), columnIndex, childNode.data.FormattedID);
+                arr.push(_.values(_.pick(childNode.data, columnsOfInterest)));
+                text += Rally.technicalservices.util.Excel.formatArrayAsRow(_.flatten(arr));
+                 if (recursive){
+                    text += Rally.technicalservices.Export._getChildNodeRows(true, childNode, columnIndex, columnsOfInterest);
+                }
+        });
+        return text;
+    },
+    _getNodeDepth: function(node){
+        var depth =  node.getDepth();
+        console.log('node',node, node.isLoaded(), node.isLoading(), node.hasChildNodes());
+
+        if (node.hasChildNodes()){
+            node.eachChild(function(child){
+                console.log(node, child, child.depth);
+                var childDepth = Rally.technicalservices.Export._getNodeDepth(child);
+                if (childDepth > depth){
+                    depth = childDepth;
+                }
+            });
+        }
+
+        return depth;
+    },
+
+    exportSummary: function(filename, grid){
+        var root = grid.store.getRootNode();
+        var columnsOfInterest = _.map(grid.columnCfgs, function(cfg){
+            if (typeof cfg == 'object'){
+                return cfg.dataIndex;
+            }
+            return cfg;
+        });
+        columnsOfInterest = _.without(columnsOfInterest,'FormattedID');
+
+        //We want the first child of the root node, plus its' children
+        this._exportNodeSummary(root,columnsOfInterest, filename);
+
+    },
+    _exportNodeSummary: function(expandedNode,columnsOfInterest,filename){
+        var headers = [];
+        headers[0] = 'Initiative';
+        headers[1] = 'Feature';
+        headers.push(columnsOfInterest);
+        headers = _.flatten(headers);
+        var rows = Rally.technicalservices.util.Excel.formatArrayAsRow(headers);
+
+        Ext.each(expandedNode.childNodes, function (firstLevelNode) {
+            var arr = Rally.technicalservices.Export._initializeArray(firstLevelNode.getDepth(), 2, firstLevelNode.data.FormattedID);
+            Ext.each(columnsOfInterest, function(col){
+                arr.push(firstLevelNode.data[col]);
+            });
+            rows += Rally.technicalservices.util.Excel.formatArrayAsRow(_.flatten(arr));
+            rows += Rally.technicalservices.Export._getChildNodeRows(false, firstLevelNode, 2, columnsOfInterest);
+        });
+        var table = Rally.technicalservices.util.Excel.formatTable(rows);
+        var text = Rally.technicalservices.util.Excel.formatHtml(Rally.technicalservices.util.Excel.formatBody(table));
+        Rally.technicalservices.FileUtilities.saveTextAsFile(text,filename);
+    },
+
+    _initializeArray: function(nodeDepth, columnIndex, formattedID){
+        var arr = _.range(columnIndex).map(function(a){return ''});
+        arr[nodeDepth-1] = formattedID;
+        return arr;
+    },
+    _getDeepestNodeDepth: function(root){
+        var depth = 0;
+        root.eachChild(function(node){
+            console.log(node);
+            var nodeDepth = Rally.technicalservices.Export._getNodeDepth(node);
+            console.log('nodedepth',nodeDepth);
+            if (nodeDepth > depth){
+                depth = nodeDepth;
+            }
+        });
+       return depth;
+    }
+});
+
+
+Ext.define('Rally.technicalservices.FileUtilities', {
+    singleton: true,
+    logger: new Rally.technicalservices.Logger(),
+    saveHTMLToFile:function(html,file_name,type_object){
+        if (type_object == undefined){
+            type_object = {type:'text/html;charset=utf-8'};
+        }
+        var blob = new Blob([html],type_object);
+        saveAs(blob,file_name);
+    },
+
+    saveTextAsFile: function(textToWrite, fileName)
+    {
+        console.log('saveTextAsFile',textToWrite, fileName);
+        var textFileAsBlob = new Blob([textToWrite], {type:'text/plain'});
+        var fileNameToSaveAs = fileName;
+
+        if (this.detectIE() >= 10){
+            console.log(window.navigator);
+            window.navigator.msSaveBlob(textFileAsBlob, fileNameToSaveAs);
+        } else {
+
+            var downloadLink = document.createElement("a");
+            downloadLink.download = fileNameToSaveAs;
+            downloadLink.innerHTML = "Download File";
+            if (window.webkitURL != null)
+            {
+                // Chrome allows the link to be clicked
+                // without actually adding it to the DOM.
+                downloadLink.href = window.webkitURL.createObjectURL(textFileAsBlob);
+            }
+            else
+            {
+                // Firefox requires the link to be added to the DOM
+                // before it can be clicked.
+                downloadLink.href = window.URL.createObjectURL(textFileAsBlob);
+                downloadLink.onclick = this.destroyClickedElement;
+                downloadLink.style.display = "none";
+                document.body.appendChild(downloadLink);
+            }
+            downloadLink.click();
+        }
+    },
+    destroyClickedElement: function(event)
+    {
+        document.body.removeChild(event.target);
+    },
+    convertDataArrayToCSVText: function(data_array, requestedFieldHash){
+
+        var text = '';
+        Ext.each(Object.keys(requestedFieldHash), function(key){
+            text += requestedFieldHash[key] + ',';
+        });
+        text = text.replace(/,$/,'\n');
+
+        Ext.each(data_array, function(d){
+            Ext.each(Object.keys(requestedFieldHash), function(key){
+                if (d[key]){
+                    if (typeof d[key] === 'object'){
+                        if (d[key].FormattedID) {
+                            text += Ext.String.format("\"{0}\",",d[key].FormattedID );
+                        } else if (d[key].Name) {
+                            text += Ext.String.format("\"{0}\",",d[key].Name );
+                        } else if (!isNaN(Date.parse(d[key]))){
+                            text += Ext.String.format("\"{0}\",",Rally.util.DateTime.formatWithDefaultDateTime(d[key]));
+                        }else {
+                            text += Ext.String.format("\"{0}\",",d[key].toString());
+                        }
+                    } else {
+                        text += Ext.String.format("\"{0}\",",d[key] );
+                    }
+                } else {
+                    text += ',';
+                }
+            },this);
+            text = text.replace(/,$/,'\n');
+        },this);
+        return text;
+    },
+    scrubStringForXML: function(string){
+        console.log('scrub',string);
+        if (string) {
+            var scrubbed_string = string.replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&apos;');
+            return scrubbed_string;
+        }
+        return '';
+    },
+    detectIE: function(){
+        var ua = window.navigator.userAgent;
+
+        var msie = ua.indexOf('MSIE ');
+        if (msie > 0) {
+            // IE 10 or older => return version number
+            return parseInt(ua.substring(msie + 5, ua.indexOf('.', msie)), 10);
+        }
+
+        var trident = ua.indexOf('Trident/');
+        if (trident > 0) {
+            // IE 11 => return version number
+            var rv = ua.indexOf('rv:');
+            return parseInt(ua.substring(rv + 3, ua.indexOf('.', rv)), 10);
+        }
+
+        var edge = ua.indexOf('Edge/');
+        if (edge > 0) {
+            // IE 12 => return version number
+            return parseInt(ua.substring(edge + 5, ua.indexOf('.', edge)), 10);
+        }
+
+        // other browser
+        return false;
+    }
+
+    //https://msdn.microsoft.com/en-us/library/ie/hh673542(v=vs.85).aspx
+});
+
+    Ext.override(Rally.ui.renderer.RendererFactory, {
+        singleton: true,
+        typeTemplates: {
+            text: function(field){
+//                return Ext.create('Rally.ui.renderer.template.StringTemplate', {
+                return Ext.create('Rally.technicalservices.renderer.template.TruncatedStringTemplate', {
+                    fieldName: field.name
+                });
+            },
+            string: function(field){
+                return this.text(field);
+            },
+            'boolean': function(field) {
+                return Ext.create('Rally.ui.renderer.template.BooleanTemplate', {
+                    fieldName: field.name
+                });
+            },
+
+            collection: function(field) {
+                return Ext.create('Rally.ui.renderer.template.CollectionTemplate',{
+                    fieldName: field.name
+                });
+            },
+
+            date: function(field) {
+                return Ext.create('Rally.ui.renderer.template.DateTemplate', {
+                    fieldName: field.name
+                });
+            },
+
+            decimal: function(field) {
+                return Ext.create('Rally.ui.renderer.template.DecimalTemplate', {
+                    fieldName: field.name,
+                    maxFractionalDigits: field.attributeDefinition ? field.attributeDefinition.MaxFractionalDigits : -1
+                });
+            },
+
+            'float': function(field) {
+                return Ext.create('Rally.ui.renderer.template.DecimalTemplate', {
+                    fieldName: field.name,
+                    maxFractionalDigits: field.attributeDefinition ? field.attributeDefinition.MaxFractionalDigits : -1
+                });
+            },
+
+            integer: function(field) {
+                return Ext.create('Rally.ui.renderer.template.DecimalTemplate', {
+                    fieldName: field.name
+                });
+            },
+
+            //for Rally objects, use the _refObjectName property
+            object: function(field) {
+                return Ext.create('Rally.ui.renderer.template.ObjectTemplate',{
+                    fieldName: field.name
+                });
+            },
+
+            quantity: function(field) {
+                return Ext.create('Rally.ui.renderer.template.DecimalTemplate', {
+                    fieldName: field.name,
+                    maxFractionalDigits: field.attributeDefinition ? field.attributeDefinition.MaxFractionalDigits : -1
+                });
+            },
+
+            web_link: function(field) {
+                return Ext.create('Rally.ui.renderer.template.WebLinkTemplate', {
+                    fieldName: field.name,
+                    urlWithTokens: field.attributeDefinition.URL,
+                    shouldOpenInNewWindow: field.attributeDefinition.DisplayPreference !== 1
+                });
+            }
+        }
+
+    });
+    Ext.define('Rally.technicalservices.renderer.template.TruncatedStringTemplate', {
+        extend: 'Ext.XTemplate',
+        requires: [
+            'Rally.util.String'
+        ],
+
+        /**
+         * @cfg {String}
+         * the name of the field to get the value for (required)
+         */
+        fieldName: '',
+
+        /**
+         * @cfg {Boolean}
+         * convert the string value to title case if true
+         */
+        titleCase: false,
+
+        /**
+         * @cfg {Array}
+         * convert these characters to spaces
+         */
+        toSpace: [],
+        truncateThreshhold: 25,
+        constructor: function(config) {
+            var templateConfig = [
+                '{[this.formatString(values)]}',
+                {
+                    formatString:function (values) {
+                        var value = values[this.fieldName];
+                        if (!value) {
+                            return '';
+                        }
+
+                        value = Rally.util.String.fixMarkup(value);
+
+                        if (!_.isEmpty(this.toSpace)) {
+                            var regex = new RegExp('[' + this.toSpace.join() + ']', 'g');
+                            value = value.replace(regex, ' ');
+                        }
+
+                        if (this.titleCase) {
+                            value = Rally.util.String.toTitleCase(value);
+                        }
+                        return value;
+                    }
+                },
+                config
+            ];
+            return this.callParent(templateConfig);
+        }
+    });
+Ext.override(Rally.data.wsapi.TreeStoreBuilder, {
+        _setupTreeModel: function(models, config) {
+            var modelsToLoad = [];
+            var allTypes = _.pluck(models, 'typePath');
+
+            //Only want specific parent types
+            var parentTypes = config.parentTypes;  //_.filter(allTypes, config.mapper.isParentType, config.mapper);
+
+            config.enableHierarchy = config.enableHierarchy && parentTypes.length > 0;
+
+            if(config.enableHierarchy) {
+                config.parentTypes = parentTypes;
+                modelsToLoad = this._getChildModelsToLoad(config);
+            } else {
+                config.parentTypes = allTypes;
+            }
+
+            if (modelsToLoad.length > 0) {
+                return this._loadChildModels(modelsToLoad, models, config);
+            }
+
+            return Deft.Promise.when(models);
+        }
+    });
+
+Ext.override(Rally.data.wsapi.TreeStore, {
+    _getChildNodeFilters: function(node) {
+        var parentType = node.self.typePath,
+            childTypes = this._getChildTypePaths([parentType]),
+            parentFieldNames = this._getParentFieldNames(childTypes, parentType);
+        console.log('_getChildNodeFilters',node, parentType, childTypes,parentFieldNames, this.childFilters);
+
+        if (parentFieldNames.length) {
+            var filters =  Rally.data.wsapi.Filter.or(_.map(parentFieldNames, function(parentFieldName) {
+                return {
+                    property: parentFieldName,
+                    operator: '=',
+                    value: node.get('_ref')
+                };
+            }));
+            if (this.childFilters && this.childFilters[parentType]){
+                console.log(filters.and(this.childFilters[parentType]).toString());
+                return [filters.and(this.childFilters[parentType])];
+            }
+            return [filters];
+        }
+        return [];
+    },
+    filterChildren: function(childFilterObjects){
+        //need to make sure that the fields are on the types
+        this.childFilters = childFilterObjects;
+        this.load();
+    }
+});
+
+
+Ext.override(Rally.ui.grid.plugin.TreeGridChildPager, {
+    _storeHasMoreChildPages: function(parentRecord) {
+        var loadedCount = this._getLoadedCount(parentRecord);
+        var childPageSize = this.cmp.getStore().getChildPageSize(parentRecord);
+        console.log('_storeHasMoreChildPages', loadedCount, parentRecord.get('leafCount'));
+        return parentRecord.get('leafCount') > loadedCount && loadedCount >= childPageSize;
+    }
+});
+
+Ext.override(Rally.ui.gridboard.plugin.GridBoardFieldPicker, {
+    gridFieldBlackList: [
+        'Actuals',
+        'Changesets',
+        'Children',
+        //   'Description',
+        //   'Notes',
+        'ObjectID',
+        'Predecessors',
+        'RevisionHistory',
+        'Subscription',
+        'Successors',
+        'TaskIndex',
+        'Workspace',
+        'VersionId'
+    ]
+});
+
+Ext.define("portfolio-drilldown-report", {
+    extend: 'Rally.app.App',
+    componentCls: 'app',
+    logger: new Rally.technicalservices.Logger(),
+    defaults: { margin: 10 },
+    items: [
+        {xtype:'container',itemId:'criteria_box', layout: {type: 'hbox'}},
+        {xtype:'container',itemId:'display_box'},
+        {xtype:'tsinfolink'}
+    ],
+    portfolioItemTypes: ['PortfolioItem/Feature','PortfolioItem/Initiative'],
+    launch: function() {
+
+        this.down('#criteria_box').add({
+            itemId: 'cb-release',
+            xtype: 'rallyreleasecombobox',
+            listeners: {
+                change: this._onReleaseChanged,
+                scope: this
+            }
+        });
+
+        this.down('#criteria_box').add({
+            xtype: 'rallybutton',
+            text: 'Portfolio Items...',
+            listeners: {
+                scope: this,
+                click: this._launchChooser
+            }
+        });
+    },
+    _onReleaseChanged: function(cb){
+        var grid = this.down('rallygridboard');
+        if (grid){
+            grid.getGridOrBoard().store.filterChildren(this._getChildFilter(cb));
+            this._expandNodes(grid);
+        }
+    },
+    _getChildFilter: function(cb){
+        var filters = Ext.create('Rally.data.wsapi.Filter',{
+            property: 'Release.Name',
+            value: cb.getRecord().get('Name')
+        });
+        var filterObj = {};
+        filterObj[this.portfolioItemTypes[1].toLowerCase()] = filters;
+        return filterObj;
+    },
+    _launchChooser: function(){
+        Ext.create('Rally.ui.dialog.ArtifactChooserDialog', {
+            artifactTypes: this.portfolioItemTypes[1],
+            autoShow: true,
+            height: 250,
+            title: 'Choose PortfolioItem',
+            multiple: true,
+            listeners: {
+                artifactchosen: function(dialog, selectedRecords){
+                    this.selectedPortfolioItem = selectedRecords;
+                    this._runReport();
+                },
+                scope: this
+            }
+        });
+    },
+    _runReport: function(){
+        var rootItem = this.selectedPortfolioItem;
+        this.logger.log('_runReport', rootItem);
+
+        //determine if this is the detailed or summary view
+
+        //load child artifacts
+        var filters = [];
+        Ext.each(rootItem, function(i){
+            filters.push({
+                property: 'ObjectID',
+                value: i.get('ObjectID')
+            });
+        });
+        filters = Rally.data.wsapi.Filter.or(filters);
+
+        var childFilterHash = this._getChildFilter(this.down('#cb-release'));
+
+        var columnModels = [this.portfolioItemTypes[1],this.portfolioItemTypes[0],'HierarchicalRequirement','Task'];
+        var context = this.getContext();
+
+        console.log('childFilterHash', childFilterHash);
+        Ext.create('Rally.data.wsapi.TreeStoreBuilder').build({
+            models: [this.portfolioItemTypes[1],this.portfolioItemTypes[0]],
+            autoLoad: true,
+            enableHierarchy: true,
+            parentTypes: [this.portfolioItemTypes[1]],
+            childFilters: childFilterHash,
+            filters: filters
+        }).then({
+            scope: this,
+            success: function(store) {
+                if (this.down('rallygridboard')){
+                    this.remove('rallygridboard');
+                }
+                var gridboard = this.down('#display_box').add({
+                        xtype: 'rallygridboard',
+                        context: this.getContext(),
+                        modelNames: [this.portfolioItemTypes[1],this.portfolioItemTypes[0]],
+                        toggleState: 'grid',
+                        plugins: [
+                            {
+                                ptype: 'rallygridboardfieldpicker',
+                                headerPosition: 'left',
+                                modelNames: columnModels,
+                                stateful: true,
+                                stateId: context.getScopedStateId('columns-example')
+                            },
+                            {
+                                ptype: 'rallygridboardactionsmenu',
+                                menuItems: [
+                                    {
+                                        text: 'Export Summary...',
+                                        handler: function() {
+                                            var filename = 'summary.html';
+                                            Rally.technicalservices.Export.exportSummary(filename,
+                                                this.down('rallygridboard').getGridOrBoard());
+                                        },
+                                        scope: this
+                                    },
+                                    {
+                                        text: 'Export Details...',
+                                        handler: function() {
+                                            var filename = 'detail.html';
+                                            Rally.technicalservices.Export.exportDetail(filename,
+                                                this.down('rallygridboard').getGridOrBoard());
+                                        },
+                                        scope: this
+                                    }
+                                ],
+                                buttonConfig: {
+                                    iconCls: 'icon-export'
+                                }
+                            }
+
+
+                        ],
+                        cardBoardConfig: {
+                            attribute: 'ScheduleState'
+                        },
+                        gridConfig: {
+                            store: store,
+                            columnCfgs: this._getColumnCfgs(),
+                            collapsed: false
+                        },
+                        height: this.getHeight()
+                    });
+                this._expandNodes(gridboard);
+            }
+         });
+
+    },
+    _expandNodes: function(gridboard){
+        gridboard.on('load',function(gb){console.log('expand',gb.getGridOrBoard());gb.getGridOrBoard().expandAll();},this, {single: true});
+    },
+    _getColumnCfgs: function(){
+        return ['Name'];
+    },
+    _getReleaseFilters: function(){
+        var release_name = this.down('#cb-release').getRecord().get('Name');
+
+        Ext.create('Rally.data.wsapi.Store',{
+            model: 'Release',
+            filters: [{
+                property: 'Name',
+                value: release_name
+            }],
+            fetch: ['_ref'],
+            autoLoad: true,
+            listeners: {
+                scope: this,
+                load: this._onReleasesLoaded
+            }
+        });
+        console.log(release_name);
+    },
+    _onReleasesLoaded: function(store, records, success){
+        if (success){
+            var treeFilters = _.map(records, function(r){
+                return {property: 'Release', value: r.get('_ref')};
+            });
+            treeFilters = Rally.data.wsapi.Filter.or(treeFilters);
+            this._displayGrid(treeFilters);
+        } else {
+            Rally.ui.notify.Notifier.showError({message: "Unable to load releases"});
+        }
+    },
+    _displayGrid: function(treeFilters){
+        var models = ['PortfolioItem/Initiative'];
+        var filterModels = ['PortfolioItem/Initiative','PortfolioItem/Feature'];
+        var context = this.getContext();
+
+        if (this.down('rallygridboard')){
+            this.down('rallygridboard').remove();
+        }
+
+        Ext.create('Rally.data.wsapi.TreeStoreBuilder').build({
+            models: models,
+            enableHierarchy: true,
+            parentTypes: models
+        }).then({
+            scope: this,
+            success: function(store) {
+              //  store.filterBy(treeFilters);
+                console.log(store);
+                var grid = Ext.create('Ext.Container', {
+                    items: [{
+                        xtype: 'rallygridboard',
+                        context: context,
+                       // modelNames: models,
+                        toggleState: 'grid',
+                        plugins: [
+                            {
+                                ptype: 'rallygridboardfieldpicker',
+                                headerPosition: 'left',
+                                modelNames: models,
+                                stateful: true,
+                                stateId: context.getScopedStateId('columns-example')
+                            },
+                            {
+                                ptype: 'rallygridboardactionsmenu',
+                                menuItems: [
+                                    {
+                                        text: 'Export...',
+                                        handler: function() {
+                                            window.location = Rally.ui.grid.GridCsvExport.buildCsvExportUrl(
+                                                this.down('rallygridboard').getGridOrBoard());
+                                        },
+                                        scope: this
+                                    }
+                                ],
+                                buttonConfig: {
+                                    iconCls: 'icon-export'
+                                }
+                            },
+                            {
+                                ptype: 'rallygridboardcustomfiltercontrol',
+                                filterControlConfig: {
+                                    modelNames: filterModels,
+                                    stateful: true,
+                                    stateId: context.getScopedStateId('custom-filter-example')
+                                },
+                                showOwnerFilter: false
+                            }
+                        ],
+                        cardBoardConfig: {
+                            attribute: 'ScheduleState'
+                        },
+                        gridConfig: {
+                            store: store,
+                            columnCfgs: [
+                                'Name'
+                            ]
+                        },
+                        height: this.getHeight()
+                    }]
+                });
+
+                this.down('#display_box').add(grid);
+            }
+        });    }
+});
+
+            
+               Rally.launchApp('portfolio-drilldown-report', {
+                   name: 'Portfolio Drilldown Report'
+               });
+        });
+    </script>
+    
+    <style type="text/css">
+
+.app {
+}
+.tsinfolink {
+    position:absolute;
+    right:0px;
+    width: 14px;
+    height: 14px;
+    border-radius: 7px;
+    text-align: center;
+    color: white;
+    background: #C0C0C0;
+    border-style: solid;
+    border-width: 1px;
+    margin-top: 25px;
+    margin-right: 5px;
+    cursor: pointer;
+}
+    </style>
+
+</head>
+<body></body>
+</html>

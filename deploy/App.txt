@@ -3,11 +3,11 @@
 <head>
     <title>Portfolio Drilldown Report</title>
     <!--  (c) 2015 Rally Software Development Corp.  All Rights Reserved. -->
-    <!--  Build Date: Sun Apr 05 2015 21:38:09 GMT-0600 (MDT) -->
+    <!--  Build Date: Sun Apr 05 2015 21:44:07 GMT-0600 (MDT) -->
     
     <script type="text/javascript">
-        var APP_BUILD_DATE = "Sun Apr 05 2015 21:38:09 GMT-0600 (MDT)";
-        var CHECKSUM = 24830951234;
+        var APP_BUILD_DATE = "Sun Apr 05 2015 21:44:07 GMT-0600 (MDT)";
+        var CHECKSUM = 25145688359;
     </script>
     
     <script type="text/javascript" src="/apps/2.0/sdk.js"></script>
@@ -254,7 +254,8 @@ Ext.define('Rally.technicalservices.Export',{
     _exportNodeDetail: function(expandedNode,columnsOfInterest,filename){
         var nodeDepth = Rally.technicalservices.Export._getDeepestNodeDepth(expandedNode);
         var nameIndex = nodeDepth;
-        var headers = [];  //['Initiative', 'Feature'];
+
+        var headers = [];
         for (var i=0; i<nodeDepth; i++){
             headers.push('');
         }
@@ -263,6 +264,8 @@ Ext.define('Rally.technicalservices.Export',{
         headers.push(columnsOfInterest);
         headers = _.flatten(headers);
         var rows = Rally.technicalservices.util.Excel.formatArrayAsRow(headers);
+
+
         Ext.each(expandedNode.childNodes, function (firstLevelNode) {
             var arr = Rally.technicalservices.Export._initializeArray(firstLevelNode.getDepth(), nameIndex, firstLevelNode.data.FormattedID);
             Ext.each(columnsOfInterest, function(col){
@@ -318,26 +321,30 @@ Ext.define('Rally.technicalservices.Export',{
         columnsOfInterest = _.without(columnsOfInterest,'FormattedID');
 
         //We want the first child of the root node, plus its' children
-        var promises = [];
-        Ext.each(root.childNodes, function(firstLevelNode){
-            promises.push(Rally.technicalservices.Export._expandWithPromise(firstLevelNode));
-        });
-        Deft.Promise.all(promises).then({
-            success: function() {
-                var nodeDepth = Rally.technicalservices.Export._getDeepestNodeDepth(root);
-                var nameIndex = nodeDepth;
+        this._exportNodeSummary(root,columnsOfInterest, filename);
 
-                 var text = 'Initiative, Feature, ' + columnsOfInterest.join(',') + '\n';
-                 Ext.each(root.childNodes, function (firstLevelNode) {
-                    var arr = Rally.technicalservices.Export._initializeArray(firstLevelNode.getDepth(), nameIndex, firstLevelNode.data.FormattedID);
-                    arr.push(_.values(_.pick(firstLevelNode.data, columnsOfInterest)));
-                    text += _.flatten(arr).join(',') + '\n';
-                    text += Rally.technicalservices.Export._getChildNodeRows(false, firstLevelNode, nameIndex, columnsOfInterest);
-                });
-                Rally.technicalservices.FileUtilities.saveTextAsFile(text,filename);
-            }
-        });
     },
+    _exportNodeSummary: function(expandedNode,columnsOfInterest,filename){
+        var headers = [];
+        headers[0] = 'Initiative';
+        headers[1] = 'Feature';
+        headers.push(columnsOfInterest);
+        headers = _.flatten(headers);
+        var rows = Rally.technicalservices.util.Excel.formatArrayAsRow(headers);
+
+        Ext.each(expandedNode.childNodes, function (firstLevelNode) {
+            var arr = Rally.technicalservices.Export._initializeArray(firstLevelNode.getDepth(), 2, firstLevelNode.data.FormattedID);
+            Ext.each(columnsOfInterest, function(col){
+                arr.push(firstLevelNode.data[col]);
+            });
+            rows += Rally.technicalservices.util.Excel.formatArrayAsRow(_.flatten(arr));
+            rows += Rally.technicalservices.Export._getChildNodeRows(false, firstLevelNode, 2, columnsOfInterest);
+        });
+        var table = Rally.technicalservices.util.Excel.formatTable(rows);
+        var text = Rally.technicalservices.util.Excel.formatHtml(Rally.technicalservices.util.Excel.formatBody(table));
+        Rally.technicalservices.FileUtilities.saveTextAsFile(text,filename);
+    },
+
     _initializeArray: function(nodeDepth, columnIndex, formattedID){
         var arr = _.range(columnIndex).map(function(a){return ''});
         arr[nodeDepth-1] = formattedID;

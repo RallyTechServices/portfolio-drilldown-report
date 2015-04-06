@@ -82,7 +82,6 @@ Ext.define("portfolio-drilldown-report", {
         var columnModels = [this.portfolioItemTypes[1],this.portfolioItemTypes[0],'HierarchicalRequirement','Task'];
         var context = this.getContext();
 
-        console.log('childFilterHash', childFilterHash);
         Ext.create('Rally.data.wsapi.TreeStoreBuilder').build({
             models: [this.portfolioItemTypes[1],this.portfolioItemTypes[0]],
             autoLoad: true,
@@ -93,11 +92,12 @@ Ext.define("portfolio-drilldown-report", {
         }).then({
             scope: this,
             success: function(store) {
-                if (this.down('rallygridboard')){
-                    this.remove('rallygridboard');
+                if (this.down('#gb-report')){
+                    this.down('#gb-report').destroy();
                 }
                 var gridboard = this.down('#display_box').add({
                         xtype: 'rallygridboard',
+                        itemId: 'gb-report',
                         context: this.getContext(),
                         modelNames: [this.portfolioItemTypes[1],this.portfolioItemTypes[0]],
                         toggleState: 'grid',
@@ -154,7 +154,7 @@ Ext.define("portfolio-drilldown-report", {
 
     },
     _expandNodes: function(gridboard){
-        gridboard.on('load',function(gb){console.log('expand',gb.getGridOrBoard());gb.getGridOrBoard().expandAll();},this, {single: true});
+        gridboard.on('load',function(gb){gb.getGridOrBoard().expandAll();},this, {single: true});
     },
     _getColumnCfgs: function(){
         return ['Name'];
@@ -175,7 +175,6 @@ Ext.define("portfolio-drilldown-report", {
                 load: this._onReleasesLoaded
             }
         });
-        console.log(release_name);
     },
     _onReleasesLoaded: function(store, records, success){
         if (success){
@@ -204,8 +203,7 @@ Ext.define("portfolio-drilldown-report", {
         }).then({
             scope: this,
             success: function(store) {
-              //  store.filterBy(treeFilters);
-                console.log(store);
+
                 var grid = Ext.create('Ext.Container', {
                     items: [{
                         xtype: 'rallygridboard',

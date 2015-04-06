@@ -49,7 +49,6 @@ Ext.override(Rally.data.wsapi.TreeStore, {
     filterChildren: function(childFilterObjects){
         //need to make sure that the fields are on the types
         this.childFilters = childFilterObjects;
-        console.log(this.childFilters);
         this.load();
     }
 });
@@ -62,4 +61,22 @@ Ext.override(Rally.ui.grid.plugin.TreeGridChildPager, {
         console.log('_storeHasMoreChildPages', loadedCount, parentRecord.get('leafCount'));
         return parentRecord.get('leafCount') > loadedCount && loadedCount >= childPageSize;
     }
+});
+
+Ext.override(Rally.ui.gridboard.plugin.GridBoardFieldPicker, {
+    gridFieldBlackList: [
+        'Actuals',
+        'Changesets',
+        'Children',
+        //   'Description',
+        //   'Notes',
+        'ObjectID',
+        'Predecessors',
+        'RevisionHistory',
+        'Subscription',
+        'Successors',
+        'TaskIndex',
+        'Workspace',
+        'VersionId'
+    ]
 });

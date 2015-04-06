@@ -32,16 +32,18 @@ Ext.define("portfolio-drilldown-report", {
     _onReleaseChanged: function(cb){
         var grid = this.down('rallygridboard');
         if (grid){
-            var filters = Ext.create('Rally.data.wsapi.Filter',{
-                property: 'Release.Name',
-                value: cb.getRecord().get('Name')
-            });
-
-            var filterObj = {};
-            filterObj[this.portfolioItemTypes[1].toLowerCase()] = filters;
-            console.log(grid.getGridOrBoard());
-            grid.getGridOrBoard().store.filterChildren(filterObj);
+            grid.getGridOrBoard().store.filterChildren(this._getChildFilter(cb));
+            this._expandNodes(grid);
         }
+    },
+    _getChildFilter: function(cb){
+        var filters = Ext.create('Rally.data.wsapi.Filter',{
+            property: 'Release.Name',
+            value: cb.getRecord().get('Name')
+        });
+        var filterObj = {};
+        filterObj[this.portfolioItemTypes[1].toLowerCase()] = filters;
+        return filterObj;
     },
     _launchChooser: function(){
         Ext.create('Rally.ui.dialog.ArtifactChooserDialog', {
@@ -49,9 +51,10 @@ Ext.define("portfolio-drilldown-report", {
             autoShow: true,
             height: 250,
             title: 'Choose PortfolioItem',
+            multiple: true,
             listeners: {
-                artifactchosen: function(dialog, selectedRecord){
-                    this.selectedPortfolioItem = selectedRecord;
+                artifactchosen: function(dialog, selectedRecords){
+                    this.selectedPortfolioItem = selectedRecords;
                     this._runReport();
                 },
                 scope: this
@@ -61,34 +64,39 @@ Ext.define("portfolio-drilldown-report", {
     _runReport: function(){
         var rootItem = this.selectedPortfolioItem;
         this.logger.log('_runReport', rootItem);
-        var releaseName = this.down('#cb-release').getRecord().get('Name');
 
         //determine if this is the detailed or summary view
 
         //load child artifacts
-        var filters = [{
-            property: 'ObjectID',
-            value: rootItem.get('ObjectID')
-        }];
+        var filters = [];
+        Ext.each(rootItem, function(i){
+            filters.push({
+                property: 'ObjectID',
+                value: i.get('ObjectID')
+            });
+        });
+        filters = Rally.data.wsapi.Filter.or(filters);
 
-        var childFilterHash = {};
-        childFilterHash[this.portfolioItemTypes[1].toLowerCase()] = Ext.create('Rally.data.wsapi.Filter', {property: 'Release.Name', value:releaseName});
+        var childFilterHash = this._getChildFilter(this.down('#cb-release'));
 
         var columnModels = [this.portfolioItemTypes[1],this.portfolioItemTypes[0],'HierarchicalRequirement','Task'];
         var context = this.getContext();
+
         console.log('childFilterHash', childFilterHash);
         Ext.create('Rally.data.wsapi.TreeStoreBuilder').build({
             models: [this.portfolioItemTypes[1],this.portfolioItemTypes[0]],
             autoLoad: true,
             enableHierarchy: true,
             parentTypes: [this.portfolioItemTypes[1]],
-            //childFilters: childFilterHash,
+            childFilters: childFilterHash,
             filters: filters
         }).then({
             scope: this,
             success: function(store) {
-                console.log('storeloaded');
-                this.down('#display_box').add({
+                if (this.down('rallygridboard')){
+                    this.remove('rallygridboard');
+                }
+                var gridboard = this.down('#display_box').add({
                         xtype: 'rallygridboard',
                         context: this.getContext(),
                         modelNames: [this.portfolioItemTypes[1],this.portfolioItemTypes[0]],
@@ -107,7 +115,8 @@ Ext.define("portfolio-drilldown-report", {
                                     {
                                         text: 'Export Summary...',
                                         handler: function() {
-                                            window.location = Rally.technicalservices.buildCsvExportUrl(
+                                            var filename = 'summary.html';
+                                            Rally.technicalservices.Export.exportSummary(filename,
                                                 this.down('rallygridboard').getGridOrBoard());
                                         },
                                         scope: this
@@ -115,7 +124,9 @@ Ext.define("portfolio-drilldown-report", {
                                     {
                                         text: 'Export Details...',
                                         handler: function() {
-                                            console.log('Export Details...');
+                                            var filename = 'detail.html';
+                                            Rally.technicalservices.Export.exportDetail(filename,
+                                                this.down('rallygridboard').getGridOrBoard());
                                         },
                                         scope: this
                                     }
@@ -132,14 +143,21 @@ Ext.define("portfolio-drilldown-report", {
                         },
                         gridConfig: {
                             store: store,
-                            columnCfgs: [
-                                'Name'
-
-                            ]
+                            columnCfgs: this._getColumnCfgs(),
+                            collapsed: false
                         },
                         height: this.getHeight()
-                    });            }
-        });
+                    });
+                this._expandNodes(gridboard);
+            }
+         });
+
+    },
+    _expandNodes: function(gridboard){
+        gridboard.on('load',function(gb){console.log('expand',gb.getGridOrBoard());gb.getGridOrBoard().expandAll();},this, {single: true});
+    },
+    _getColumnCfgs: function(){
+        return ['Name'];
     },
     _getReleaseFilters: function(){
         var release_name = this.down('#cb-release').getRecord().get('Name');

@@ -3,11 +3,11 @@
 <head>
     <title>Portfolio Drilldown Report</title>
     <!--  (c) 2015 Rally Software Development Corp.  All Rights Reserved. -->
-    <!--  Build Date: Sat Mar 28 2015 19:45:40 GMT-0600 (MDT) -->
+    <!--  Build Date: Sun Apr 05 2015 21:38:09 GMT-0600 (MDT) -->
     
     <script type="text/javascript">
-        var APP_BUILD_DATE = "Sat Mar 28 2015 19:45:40 GMT-0600 (MDT)";
-        var CHECKSUM = 4916480510;
+        var APP_BUILD_DATE = "Sun Apr 05 2015 21:38:09 GMT-0600 (MDT)";
+        var CHECKSUM = 24830951234;
     </script>
     
     <script type="text/javascript" src="/apps/2.0/sdk.js"></script>
@@ -138,6 +138,472 @@ Ext.define('Rally.technicalservices.Logger',{
 
 });
 
+Ext.define('Rally.technicalservices.util.Excel',{
+    singleton: true,
+    formatCell: function(data){
+        var str = '<td></td>';
+        if (data){
+            str = Ext.String.format('<td align="top">{0}</td>',data);
+        }
+        console.log(str);
+        return str;
+    },
+    formatArrayAsRow: function(array){
+        var text = '';
+        Ext.each(array, function(a){
+            text += Rally.technicalservices.util.Excel.formatCell(Rally.technicalservices.util.String.stripParagraphTags(a));
+        });
+        text = Rally.technicalservices.util.Excel.formatRow(text);
+        return text;
+    },
+    formatRow: function(cells){
+        return Ext.String.format('<tr>{0}</tr>',cells);
+    },
+    formatTable: function(rows){
+        return Ext.String.format('<table>{0}</table>',rows);
+    },
+    formatBody: function(html){
+        return Ext.String.format('<body>{0}</body>',html);
+    },
+    formatHtml: function(body){
+        return '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">' +
+        '<head>' +
+        '<meta http-equiv=Content-Type content="application/vnd.ms-excel"/>' + //"text/html;charset=windows-1252">' +
+        '<meta name=ProgId content=Excel.Sheet/>' +
+    //    '<meta name=Generator content="Microsoft Excel 11">' +
+        '<style>br {mso-data-placement: same-cell;} p {mso-data-placement: same-cell;}</style>' +
+            '</head>' + body + '</html>';
+    }
+
+});
+
+Ext.define('Rally.technicalservices.util.String',{
+    singleton: true,
+    stripHTML: function(oldString) {
+        if (!oldString) {
+            return '';
+        }
+
+        var newString = oldString.replace(/(<([^>]+)>)/ig, "");
+        newString = escape(newString);
+        newString = newString.replace("/%0D%0A/g", " ");
+        newString = newString.replace("/%0A/g", " ");
+        newString = newString.replace("/%0D/g", " ");
+        newString = unescape(newString);
+        newString = Rally.util.String.consolidateSpaces(newString);
+
+        return newString;
+    },
+    stripParagraphTags: function(oldString){
+        if (!oldString) {
+            return;
+        }
+
+        var newString = oldString.replace(/<p[^>]*>/g, '').replace(/<\/p>/g, '<br />'); // style="mso-data-placement:same-cell;" /> ');
+        var newString = newString.replace(/<ul[^>]*>/g, '').replace(/<\/ul>/g, '<br />');
+        var newString = newString.replace(/<li[^>]*>/g, '').replace(/<\/li>/g, '<br />');
+        var newString = newString.replace(/<ol[^>]*>/g, '').replace(/<\/ol>/g, '<br />');
+
+        var newString = newString.replace(/<a[^>]*>/g, '').replace(/<\/a>/g, '');
+
+        newString = escape(newString);
+        newString = newString.replace("/%0D%0A/g", " ");
+        newString = newString.replace("/%0A/g", " ");
+        newString = newString.replace("/%0D/g", " ");
+        newString = unescape(newString);
+        newString = Rally.util.String.consolidateSpaces(newString);
+
+        return newString;
+
+    },
+    consolidateSpaces: function (inputString) {
+        if (!Ext.isString(inputString)) {
+            return inputString;
+        }
+
+        var retValue = Ext.String.trim(inputString);
+
+        return retValue.replace(/( )+/g, ' ');
+    },
+    getText: function(html) {
+        var value = '';
+        try {
+            var span = document.createElement('span');
+            span.innerHTML = html;
+            value = span.textContent || span.innerText;
+        } catch (e) { }
+        return !value ? '' : value;
+    }
+});
+Ext.define('Rally.technicalservices.Export',{
+    singleton: true,
+    exportDetail: function(filename, grid){
+        var root = grid.store.getRootNode();
+        var columnsOfInterest = _.map(grid.columnCfgs, function(cfg){
+            if (typeof cfg == 'object'){
+                return cfg.dataIndex;
+            }
+            return cfg;
+        });
+        columnsOfInterest = _.without(columnsOfInterest,'FormattedID');
+
+        //We want the first child of the root node, plus its' children
+        this._exportNodeDetail(root,columnsOfInterest, filename);
+
+    },
+    _exportNodeDetail: function(expandedNode,columnsOfInterest,filename){
+        var nodeDepth = Rally.technicalservices.Export._getDeepestNodeDepth(expandedNode);
+        var nameIndex = nodeDepth;
+        var headers = [];  //['Initiative', 'Feature'];
+        for (var i=0; i<nodeDepth; i++){
+            headers.push('');
+        }
+        headers[0] = 'Initiative';
+        headers[1] = 'Feature';
+        headers.push(columnsOfInterest);
+        headers = _.flatten(headers);
+        var rows = Rally.technicalservices.util.Excel.formatArrayAsRow(headers);
+        Ext.each(expandedNode.childNodes, function (firstLevelNode) {
+            var arr = Rally.technicalservices.Export._initializeArray(firstLevelNode.getDepth(), nameIndex, firstLevelNode.data.FormattedID);
+            Ext.each(columnsOfInterest, function(col){
+                arr.push(firstLevelNode.data[col]);
+            });
+            rows += Rally.technicalservices.util.Excel.formatArrayAsRow(_.flatten(arr));
+            rows += Rally.technicalservices.Export._getChildNodeRows(true, firstLevelNode, nameIndex, columnsOfInterest);
+        });
+        var table = Rally.technicalservices.util.Excel.formatTable(rows);
+        var text = Rally.technicalservices.util.Excel.formatHtml(Rally.technicalservices.util.Excel.formatBody(table));
+        Rally.technicalservices.FileUtilities.saveTextAsFile(text,filename);
+    },
+
+    _getChildNodeRows: function(recursive, parentNode, columnIndex, columnsOfInterest){
+        console.log('_getChildNodeRows',parentNode, parentNode.data.FormattedID, parentNode.hasChildNodes(), parentNode.childNodes);
+        var depth = parentNode.getDepth();
+        var text = '';
+        Ext.each(parentNode.childNodes, function(childNode){
+                var arr = Rally.technicalservices.Export._initializeArray(childNode.getDepth(), columnIndex, childNode.data.FormattedID);
+                arr.push(_.values(_.pick(childNode.data, columnsOfInterest)));
+                text += Rally.technicalservices.util.Excel.formatArrayAsRow(_.flatten(arr));
+                 if (recursive){
+                    text += Rally.technicalservices.Export._getChildNodeRows(true, childNode, columnIndex, columnsOfInterest);
+                }
+        });
+        return text;
+    },
+    _getNodeDepth: function(node){
+        var depth =  node.getDepth();
+        console.log('node',node, node.isLoaded(), node.isLoading(), node.hasChildNodes());
+
+        if (node.hasChildNodes()){
+            node.eachChild(function(child){
+                console.log(node, child, child.depth);
+                var childDepth = Rally.technicalservices.Export._getNodeDepth(child);
+                if (childDepth > depth){
+                    depth = childDepth;
+                }
+            });
+        }
+
+        return depth;
+    },
+
+    exportSummary: function(filename, grid){
+        var root = grid.store.getRootNode();
+        var columnsOfInterest = _.map(grid.columnCfgs, function(cfg){
+            if (typeof cfg == 'object'){
+                return cfg.dataIndex;
+            }
+            return cfg;
+        });
+        columnsOfInterest = _.without(columnsOfInterest,'FormattedID');
+
+        //We want the first child of the root node, plus its' children
+        var promises = [];
+        Ext.each(root.childNodes, function(firstLevelNode){
+            promises.push(Rally.technicalservices.Export._expandWithPromise(firstLevelNode));
+        });
+        Deft.Promise.all(promises).then({
+            success: function() {
+                var nodeDepth = Rally.technicalservices.Export._getDeepestNodeDepth(root);
+                var nameIndex = nodeDepth;
+
+                 var text = 'Initiative, Feature, ' + columnsOfInterest.join(',') + '\n';
+                 Ext.each(root.childNodes, function (firstLevelNode) {
+                    var arr = Rally.technicalservices.Export._initializeArray(firstLevelNode.getDepth(), nameIndex, firstLevelNode.data.FormattedID);
+                    arr.push(_.values(_.pick(firstLevelNode.data, columnsOfInterest)));
+                    text += _.flatten(arr).join(',') + '\n';
+                    text += Rally.technicalservices.Export._getChildNodeRows(false, firstLevelNode, nameIndex, columnsOfInterest);
+                });
+                Rally.technicalservices.FileUtilities.saveTextAsFile(text,filename);
+            }
+        });
+    },
+    _initializeArray: function(nodeDepth, columnIndex, formattedID){
+        var arr = _.range(columnIndex).map(function(a){return ''});
+        arr[nodeDepth-1] = formattedID;
+        return arr;
+    },
+    _getDeepestNodeDepth: function(root){
+        var depth = 0;
+        root.eachChild(function(node){
+            console.log(node);
+            var nodeDepth = Rally.technicalservices.Export._getNodeDepth(node);
+            console.log('nodedepth',nodeDepth);
+            if (nodeDepth > depth){
+                depth = nodeDepth;
+            }
+        });
+       return depth;
+    }
+});
+
+
+Ext.define('Rally.technicalservices.FileUtilities', {
+    singleton: true,
+    logger: new Rally.technicalservices.Logger(),
+    saveHTMLToFile:function(html,file_name,type_object){
+        if (type_object == undefined){
+            type_object = {type:'text/html;charset=utf-8'};
+        }
+        var blob = new Blob([html],type_object);
+        saveAs(blob,file_name);
+    },
+
+    saveTextAsFile: function(textToWrite, fileName)
+    {
+        console.log('saveTextAsFile',textToWrite, fileName);
+        var textFileAsBlob = new Blob([textToWrite], {type:'text/plain'});
+        var fileNameToSaveAs = fileName;
+
+        if (this.detectIE() >= 10){
+            console.log(window.navigator);
+            window.navigator.msSaveBlob(textFileAsBlob, fileNameToSaveAs);
+        } else {
+
+            var downloadLink = document.createElement("a");
+            downloadLink.download = fileNameToSaveAs;
+            downloadLink.innerHTML = "Download File";
+            if (window.webkitURL != null)
+            {
+                // Chrome allows the link to be clicked
+                // without actually adding it to the DOM.
+                downloadLink.href = window.webkitURL.createObjectURL(textFileAsBlob);
+            }
+            else
+            {
+                // Firefox requires the link to be added to the DOM
+                // before it can be clicked.
+                downloadLink.href = window.URL.createObjectURL(textFileAsBlob);
+                downloadLink.onclick = this.destroyClickedElement;
+                downloadLink.style.display = "none";
+                document.body.appendChild(downloadLink);
+            }
+            downloadLink.click();
+        }
+    },
+    destroyClickedElement: function(event)
+    {
+        document.body.removeChild(event.target);
+    },
+    convertDataArrayToCSVText: function(data_array, requestedFieldHash){
+
+        var text = '';
+        Ext.each(Object.keys(requestedFieldHash), function(key){
+            text += requestedFieldHash[key] + ',';
+        });
+        text = text.replace(/,$/,'\n');
+
+        Ext.each(data_array, function(d){
+            Ext.each(Object.keys(requestedFieldHash), function(key){
+                if (d[key]){
+                    if (typeof d[key] === 'object'){
+                        if (d[key].FormattedID) {
+                            text += Ext.String.format("\"{0}\",",d[key].FormattedID );
+                        } else if (d[key].Name) {
+                            text += Ext.String.format("\"{0}\",",d[key].Name );
+                        } else if (!isNaN(Date.parse(d[key]))){
+                            text += Ext.String.format("\"{0}\",",Rally.util.DateTime.formatWithDefaultDateTime(d[key]));
+                        }else {
+                            text += Ext.String.format("\"{0}\",",d[key].toString());
+                        }
+                    } else {
+                        text += Ext.String.format("\"{0}\",",d[key] );
+                    }
+                } else {
+                    text += ',';
+                }
+            },this);
+            text = text.replace(/,$/,'\n');
+        },this);
+        return text;
+    },
+    scrubStringForXML: function(string){
+        console.log('scrub',string);
+        if (string) {
+            var scrubbed_string = string.replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&apos;');
+            return scrubbed_string;
+        }
+        return '';
+    },
+    detectIE: function(){
+        var ua = window.navigator.userAgent;
+
+        var msie = ua.indexOf('MSIE ');
+        if (msie > 0) {
+            // IE 10 or older => return version number
+            return parseInt(ua.substring(msie + 5, ua.indexOf('.', msie)), 10);
+        }
+
+        var trident = ua.indexOf('Trident/');
+        if (trident > 0) {
+            // IE 11 => return version number
+            var rv = ua.indexOf('rv:');
+            return parseInt(ua.substring(rv + 3, ua.indexOf('.', rv)), 10);
+        }
+
+        var edge = ua.indexOf('Edge/');
+        if (edge > 0) {
+            // IE 12 => return version number
+            return parseInt(ua.substring(edge + 5, ua.indexOf('.', edge)), 10);
+        }
+
+        // other browser
+        return false;
+    }
+
+    //https://msdn.microsoft.com/en-us/library/ie/hh673542(v=vs.85).aspx
+});
+
+    Ext.override(Rally.ui.renderer.RendererFactory, {
+        singleton: true,
+        typeTemplates: {
+            text: function(field){
+//                return Ext.create('Rally.ui.renderer.template.StringTemplate', {
+                return Ext.create('Rally.technicalservices.renderer.template.TruncatedStringTemplate', {
+                    fieldName: field.name
+                });
+            },
+            string: function(field){
+                return this.text(field);
+            },
+            'boolean': function(field) {
+                return Ext.create('Rally.ui.renderer.template.BooleanTemplate', {
+                    fieldName: field.name
+                });
+            },
+
+            collection: function(field) {
+                return Ext.create('Rally.ui.renderer.template.CollectionTemplate',{
+                    fieldName: field.name
+                });
+            },
+
+            date: function(field) {
+                return Ext.create('Rally.ui.renderer.template.DateTemplate', {
+                    fieldName: field.name
+                });
+            },
+
+            decimal: function(field) {
+                return Ext.create('Rally.ui.renderer.template.DecimalTemplate', {
+                    fieldName: field.name,
+                    maxFractionalDigits: field.attributeDefinition ? field.attributeDefinition.MaxFractionalDigits : -1
+                });
+            },
+
+            'float': function(field) {
+                return Ext.create('Rally.ui.renderer.template.DecimalTemplate', {
+                    fieldName: field.name,
+                    maxFractionalDigits: field.attributeDefinition ? field.attributeDefinition.MaxFractionalDigits : -1
+                });
+            },
+
+            integer: function(field) {
+                return Ext.create('Rally.ui.renderer.template.DecimalTemplate', {
+                    fieldName: field.name
+                });
+            },
+
+            //for Rally objects, use the _refObjectName property
+            object: function(field) {
+                return Ext.create('Rally.ui.renderer.template.ObjectTemplate',{
+                    fieldName: field.name
+                });
+            },
+
+            quantity: function(field) {
+                return Ext.create('Rally.ui.renderer.template.DecimalTemplate', {
+                    fieldName: field.name,
+                    maxFractionalDigits: field.attributeDefinition ? field.attributeDefinition.MaxFractionalDigits : -1
+                });
+            },
+
+            web_link: function(field) {
+                return Ext.create('Rally.ui.renderer.template.WebLinkTemplate', {
+                    fieldName: field.name,
+                    urlWithTokens: field.attributeDefinition.URL,
+                    shouldOpenInNewWindow: field.attributeDefinition.DisplayPreference !== 1
+                });
+            }
+        }
+
+    });
+    Ext.define('Rally.technicalservices.renderer.template.TruncatedStringTemplate', {
+        extend: 'Ext.XTemplate',
+        requires: [
+            'Rally.util.String'
+        ],
+
+        /**
+         * @cfg {String}
+         * the name of the field to get the value for (required)
+         */
+        fieldName: '',
+
+        /**
+         * @cfg {Boolean}
+         * convert the string value to title case if true
+         */
+        titleCase: false,
+
+        /**
+         * @cfg {Array}
+         * convert these characters to spaces
+         */
+        toSpace: [],
+        truncateThreshhold: 25,
+        constructor: function(config) {
+            var templateConfig = [
+                '{[this.formatString(values)]}',
+                {
+                    formatString:function (values) {
+                        var value = values[this.fieldName];
+                        if (!value) {
+                            return '';
+                        }
+
+                        value = Rally.util.String.fixMarkup(value);
+
+                        if (!_.isEmpty(this.toSpace)) {
+                            var regex = new RegExp('[' + this.toSpace.join() + ']', 'g');
+                            value = value.replace(regex, ' ');
+                        }
+
+                        if (this.titleCase) {
+                            value = Rally.util.String.toTitleCase(value);
+                        }
+                        return value;
+                    }
+                },
+                config
+            ];
+            return this.callParent(templateConfig);
+        }
+    });
 Ext.override(Rally.data.wsapi.TreeStoreBuilder, {
         _setupTreeModel: function(models, config) {
             var modelsToLoad = [];
@@ -189,7 +655,6 @@ Ext.override(Rally.data.wsapi.TreeStore, {
     filterChildren: function(childFilterObjects){
         //need to make sure that the fields are on the types
         this.childFilters = childFilterObjects;
-        console.log(this.childFilters);
         this.load();
     }
 });
@@ -203,6 +668,25 @@ Ext.override(Rally.ui.grid.plugin.TreeGridChildPager, {
         return parentRecord.get('leafCount') > loadedCount && loadedCount >= childPageSize;
     }
 });
+
+Ext.override(Rally.ui.gridboard.plugin.GridBoardFieldPicker, {
+    gridFieldBlackList: [
+        'Actuals',
+        'Changesets',
+        'Children',
+        //   'Description',
+        //   'Notes',
+        'ObjectID',
+        'Predecessors',
+        'RevisionHistory',
+        'Subscription',
+        'Successors',
+        'TaskIndex',
+        'Workspace',
+        'VersionId'
+    ]
+});
+
 Ext.define("portfolio-drilldown-report", {
     extend: 'Rally.app.App',
     componentCls: 'app',
@@ -237,16 +721,18 @@ Ext.define("portfolio-drilldown-report", {
     _onReleaseChanged: function(cb){
         var grid = this.down('rallygridboard');
         if (grid){
-            var filters = Ext.create('Rally.data.wsapi.Filter',{
-                property: 'Release.Name',
-                value: cb.getRecord().get('Name')
-            });
-
-            var filterObj = {};
-            filterObj[this.portfolioItemTypes[1].toLowerCase()] = filters;
-            console.log(grid.getGridOrBoard());
-            grid.getGridOrBoard().store.filterChildren(filterObj);
+            grid.getGridOrBoard().store.filterChildren(this._getChildFilter(cb));
+            this._expandNodes(grid);
         }
+    },
+    _getChildFilter: function(cb){
+        var filters = Ext.create('Rally.data.wsapi.Filter',{
+            property: 'Release.Name',
+            value: cb.getRecord().get('Name')
+        });
+        var filterObj = {};
+        filterObj[this.portfolioItemTypes[1].toLowerCase()] = filters;
+        return filterObj;
     },
     _launchChooser: function(){
         Ext.create('Rally.ui.dialog.ArtifactChooserDialog', {
@@ -254,9 +740,10 @@ Ext.define("portfolio-drilldown-report", {
             autoShow: true,
             height: 250,
             title: 'Choose PortfolioItem',
+            multiple: true,
             listeners: {
-                artifactchosen: function(dialog, selectedRecord){
-                    this.selectedPortfolioItem = selectedRecord;
+                artifactchosen: function(dialog, selectedRecords){
+                    this.selectedPortfolioItem = selectedRecords;
                     this._runReport();
                 },
                 scope: this
@@ -266,34 +753,39 @@ Ext.define("portfolio-drilldown-report", {
     _runReport: function(){
         var rootItem = this.selectedPortfolioItem;
         this.logger.log('_runReport', rootItem);
-        var releaseName = this.down('#cb-release').getRecord().get('Name');
 
         //determine if this is the detailed or summary view
 
         //load child artifacts
-        var filters = [{
-            property: 'ObjectID',
-            value: rootItem.get('ObjectID')
-        }];
+        var filters = [];
+        Ext.each(rootItem, function(i){
+            filters.push({
+                property: 'ObjectID',
+                value: i.get('ObjectID')
+            });
+        });
+        filters = Rally.data.wsapi.Filter.or(filters);
 
-        var childFilterHash = {};
-        childFilterHash[this.portfolioItemTypes[1].toLowerCase()] = Ext.create('Rally.data.wsapi.Filter', {property: 'Release.Name', value:releaseName});
+        var childFilterHash = this._getChildFilter(this.down('#cb-release'));
 
         var columnModels = [this.portfolioItemTypes[1],this.portfolioItemTypes[0],'HierarchicalRequirement','Task'];
         var context = this.getContext();
+
         console.log('childFilterHash', childFilterHash);
         Ext.create('Rally.data.wsapi.TreeStoreBuilder').build({
             models: [this.portfolioItemTypes[1],this.portfolioItemTypes[0]],
             autoLoad: true,
             enableHierarchy: true,
             parentTypes: [this.portfolioItemTypes[1]],
-            //childFilters: childFilterHash,
+            childFilters: childFilterHash,
             filters: filters
         }).then({
             scope: this,
             success: function(store) {
-                console.log('storeloaded');
-                this.down('#display_box').add({
+                if (this.down('rallygridboard')){
+                    this.remove('rallygridboard');
+                }
+                var gridboard = this.down('#display_box').add({
                         xtype: 'rallygridboard',
                         context: this.getContext(),
                         modelNames: [this.portfolioItemTypes[1],this.portfolioItemTypes[0]],
@@ -312,7 +804,8 @@ Ext.define("portfolio-drilldown-report", {
                                     {
                                         text: 'Export Summary...',
                                         handler: function() {
-                                            window.location = Rally.technicalservices.buildCsvExportUrl(
+                                            var filename = 'summary.html';
+                                            Rally.technicalservices.Export.exportSummary(filename,
                                                 this.down('rallygridboard').getGridOrBoard());
                                         },
                                         scope: this
@@ -320,7 +813,9 @@ Ext.define("portfolio-drilldown-report", {
                                     {
                                         text: 'Export Details...',
                                         handler: function() {
-                                            console.log('Export Details...');
+                                            var filename = 'detail.html';
+                                            Rally.technicalservices.Export.exportDetail(filename,
+                                                this.down('rallygridboard').getGridOrBoard());
                                         },
                                         scope: this
                                     }
@@ -337,14 +832,21 @@ Ext.define("portfolio-drilldown-report", {
                         },
                         gridConfig: {
                             store: store,
-                            columnCfgs: [
-                                'Name'
-
-                            ]
+                            columnCfgs: this._getColumnCfgs(),
+                            collapsed: false
                         },
                         height: this.getHeight()
-                    });            }
-        });
+                    });
+                this._expandNodes(gridboard);
+            }
+         });
+
+    },
+    _expandNodes: function(gridboard){
+        gridboard.on('load',function(gb){console.log('expand',gb.getGridOrBoard());gb.getGridOrBoard().expandAll();},this, {single: true});
+    },
+    _getColumnCfgs: function(){
+        return ['Name'];
     },
     _getReleaseFilters: function(){
         var release_name = this.down('#cb-release').getRecord().get('Name');

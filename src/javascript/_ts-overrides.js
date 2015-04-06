@@ -28,7 +28,6 @@ Ext.override(Rally.data.wsapi.TreeStore, {
         var parentType = node.self.typePath,
             childTypes = this._getChildTypePaths([parentType]),
             parentFieldNames = this._getParentFieldNames(childTypes, parentType);
-        console.log('_getChildNodeFilters',node, parentType, childTypes,parentFieldNames, this.childFilters);
 
         if (parentFieldNames.length) {
             var filters =  Rally.data.wsapi.Filter.or(_.map(parentFieldNames, function(parentFieldName) {
@@ -39,8 +38,7 @@ Ext.override(Rally.data.wsapi.TreeStore, {
                 };
             }));
             if (this.childFilters && this.childFilters[parentType]){
-                console.log(filters.and(this.childFilters[parentType]).toString());
-                return [filters.and(this.childFilters[parentType])];
+                 return [filters.and(this.childFilters[parentType])];
             }
             return [filters];
         }
@@ -58,7 +56,6 @@ Ext.override(Rally.ui.grid.plugin.TreeGridChildPager, {
     _storeHasMoreChildPages: function(parentRecord) {
         var loadedCount = this._getLoadedCount(parentRecord);
         var childPageSize = this.cmp.getStore().getChildPageSize(parentRecord);
-        console.log('_storeHasMoreChildPages', loadedCount, parentRecord.get('leafCount'));
         return parentRecord.get('leafCount') > loadedCount && loadedCount >= childPageSize;
     }
 });

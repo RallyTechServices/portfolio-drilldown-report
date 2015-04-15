@@ -51,6 +51,16 @@ Ext.override(Rally.data.wsapi.TreeStore, {
     }
 });
 
+Ext.override(Rally.ui.grid.TreeView,{
+    _expandHandler: function(node, children){
+        if (this.getTreeStore().getRootNode() !== node && children.length === 0){
+            this.refresh(); //treegrid freaks out when it tries to expand a node that has no children, so force a refresh
+            if (!this.getTreeStore().hasErrors()){
+                Rally.ui.notify.Notifier.showWarning({message:node.get('FormattedID') + ' may have children that do not meet the selected release criteria and are not included in this report.'});
+            }
+        }
+    }
+});
 
 Ext.override(Rally.ui.grid.plugin.TreeGridChildPager, {
     _storeHasMoreChildPages: function(parentRecord) {
@@ -76,4 +86,69 @@ Ext.override(Rally.ui.gridboard.plugin.GridBoardFieldPicker, {
         'Workspace',
         'VersionId'
     ]
+});
+
+Ext.override(Rally.ui.dialog.ArtifactChooserDialog, {
+    beforeRender: function() {
+        this.callParent(arguments);
+
+        if (this.introText) {
+            this.addDocked({
+                xtype: 'component',
+                componentCls: 'intro-panel',
+                html: this.introText
+            });
+        }
+        this.addDocked({
+            xtype: 'radiogroup',
+            fieldLabel: 'Select Type',
+            // Arrange radio buttons into two columns, distributed vertically
+            columns: 2,
+            vertical: true,
+            items: [
+                { boxLabel: 'Features', name: 'roottype', inputValue: 0 },
+                { boxLabel: 'Initiatives', name: 'roottype', inputValue: 1, checked: true}
+            ],
+            listeners: {
+                scope: this,
+                change: function(rg){
+                    var type_index = rg.getValue().roottype;
+                    this.setArtifactTypes([this.portfolioItemTypes[type_index]]);
+
+                    if (type_index > 0){
+                        this.storeFilters = [];
+                    } else {
+                        if (this.release){
+                            this.storeFilters = [{
+                                property: 'Release.Name',
+                                value: this.release.get('Name')
+                            }];
+                        } else {
+                            this.storeFilters = [{
+                                property: 'Release',
+                                value: ""
+                            }];
+                        }
+                    }
+                    this.buildGrid();
+                }
+            }
+        });
+
+        this.addDocked({
+            xtype: 'toolbar',
+            itemId: 'searchBar',
+            dock: 'top',
+            border: false,
+            padding: '0 0 10px 0',
+            items: this.getSearchBarItems()
+        });
+
+        this.buildGrid();
+
+        this.selectionCache = this.getInitialSelectedRecords() || [];
+    },
+    getStoreFilters: function() {
+        return this.storeFilters || [];
+    }
 });

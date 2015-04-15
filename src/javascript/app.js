@@ -14,6 +14,7 @@ Ext.define("portfolio-drilldown-report", {
         this.down('#criteria_box').add({
             itemId: 'cb-release',
             xtype: 'rallyreleasecombobox',
+            allowNoEntry: true,
             listeners: {
                 change: this._onReleaseChanged,
                 scope: this
@@ -38,18 +39,28 @@ Ext.define("portfolio-drilldown-report", {
     },
     _getChildFilter: function(cb){
         var filters = Ext.create('Rally.data.wsapi.Filter',{
-            property: 'Release.Name',
-            value: cb.getRecord().get('Name')
+            property: 'Release',
+            value: ""
         });
+        if (cb.getValue() && cb.getRecord()){
+            filters = Ext.create('Rally.data.wsapi.Filter',{
+                property: 'Release.Name',
+                value: cb.getRecord().get('Name')
+            });
+        }
         var filterObj = {};
         filterObj[this.portfolioItemTypes[1].toLowerCase()] = filters;
         return filterObj;
     },
     _launchChooser: function(){
+        var release = this.down('#cb-release').getRecord() || null;
+
         Ext.create('Rally.ui.dialog.ArtifactChooserDialog', {
             artifactTypes: this.portfolioItemTypes[1],
             autoShow: true,
-            height: 250,
+            release: release,
+            portfolioItemTypes: this.portfolioItemTypes,
+            height: 500,
             title: 'Choose PortfolioItem',
             multiple: true,
             listeners: {
@@ -86,7 +97,7 @@ Ext.define("portfolio-drilldown-report", {
             models: [this.portfolioItemTypes[1],this.portfolioItemTypes[0]],
             autoLoad: true,
             enableHierarchy: true,
-            parentTypes: [this.portfolioItemTypes[1]],
+            parentTypes: [this.portfolioItemTypes[1],this.portfolioItemTypes[0]],
             childFilters: childFilterHash,
             filters: filters
         }).then({
@@ -144,11 +155,17 @@ Ext.define("portfolio-drilldown-report", {
                         gridConfig: {
                             store: store,
                             columnCfgs: this._getColumnCfgs(),
-                            collapsed: false
+                            collapsed: false,
+                            listeners: {
+                                scope: this,
+                                load: function(ts,node){
+                                    node.expand(true);
+                                }
+                            }
                         },
                         height: this.getHeight()
                     });
-                this._expandNodes(gridboard);
+
             }
          });
 

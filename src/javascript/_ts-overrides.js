@@ -87,3 +87,68 @@ Ext.override(Rally.ui.gridboard.plugin.GridBoardFieldPicker, {
         'VersionId'
     ]
 });
+
+Ext.override(Rally.ui.dialog.ArtifactChooserDialog, {
+    beforeRender: function() {
+        this.callParent(arguments);
+
+        if (this.introText) {
+            this.addDocked({
+                xtype: 'component',
+                componentCls: 'intro-panel',
+                html: this.introText
+            });
+        }
+        this.addDocked({
+            xtype: 'radiogroup',
+            fieldLabel: 'Select Type',
+            // Arrange radio buttons into two columns, distributed vertically
+            columns: 2,
+            vertical: true,
+            items: [
+                { boxLabel: 'Features', name: 'roottype', inputValue: 0 },
+                { boxLabel: 'Initiatives', name: 'roottype', inputValue: 1, checked: true}
+            ],
+            listeners: {
+                scope: this,
+                change: function(rg){
+                    var type_index = rg.getValue().roottype;
+                    this.setArtifactTypes([this.portfolioItemTypes[type_index]]);
+
+                    if (type_index > 0){
+                        this.storeFilters = [];
+                    } else {
+                        if (this.release){
+                            this.storeFilters = [{
+                                property: 'Release.Name',
+                                value: this.release.get('Name')
+                            }];
+                        } else {
+                            this.storeFilters = [{
+                                property: 'Release',
+                                value: ""
+                            }];
+                        }
+                    }
+                    this.buildGrid();
+                }
+            }
+        });
+
+        this.addDocked({
+            xtype: 'toolbar',
+            itemId: 'searchBar',
+            dock: 'top',
+            border: false,
+            padding: '0 0 10px 0',
+            items: this.getSearchBarItems()
+        });
+
+        this.buildGrid();
+
+        this.selectionCache = this.getInitialSelectedRecords() || [];
+    },
+    getStoreFilters: function() {
+        return this.storeFilters || [];
+    }
+});

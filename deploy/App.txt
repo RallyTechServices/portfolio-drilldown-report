@@ -3,11 +3,11 @@
 <head>
     <title>Portfolio Drilldown Report</title>
     <!--  (c) 2015 Rally Software Development Corp.  All Rights Reserved. -->
-    <!--  Build Date: Tue Apr 14 2015 21:15:39 GMT-0700 (PDT) -->
+    <!--  Build Date: Tue Apr 14 2015 22:23:30 GMT-0700 (PDT) -->
     
     <script type="text/javascript">
-        var APP_BUILD_DATE = "Tue Apr 14 2015 21:15:39 GMT-0700 (PDT)";
-        var CHECKSUM = 26943796349;
+        var APP_BUILD_DATE = "Tue Apr 14 2015 22:23:30 GMT-0700 (PDT)";
+        var CHECKSUM = 29915879334;
     </script>
     
     <script type="text/javascript" src="/apps/2.0/sdk.js"></script>
@@ -729,6 +729,70 @@ Ext.override(Rally.ui.gridboard.plugin.GridBoardFieldPicker, {
     ]
 });
 
+Ext.override(Rally.ui.dialog.ArtifactChooserDialog, {
+    beforeRender: function() {
+        this.callParent(arguments);
+
+        if (this.introText) {
+            this.addDocked({
+                xtype: 'component',
+                componentCls: 'intro-panel',
+                html: this.introText
+            });
+        }
+        this.addDocked({
+            xtype: 'radiogroup',
+            fieldLabel: 'Select Type',
+            // Arrange radio buttons into two columns, distributed vertically
+            columns: 2,
+            vertical: true,
+            items: [
+                { boxLabel: 'Features', name: 'roottype', inputValue: 0 },
+                { boxLabel: 'Initiatives', name: 'roottype', inputValue: 1, checked: true}
+            ],
+            listeners: {
+                scope: this,
+                change: function(rg){
+                    var type_index = rg.getValue().roottype;
+                    this.setArtifactTypes([this.portfolioItemTypes[type_index]]);
+
+                    if (type_index > 0){
+                        this.storeFilters = [];
+                    } else {
+                        if (this.release){
+                            this.storeFilters = [{
+                                property: 'Release.Name',
+                                value: this.release.get('Name')
+                            }];
+                        } else {
+                            this.storeFilters = [{
+                                property: 'Release',
+                                value: ""
+                            }];
+                        }
+                    }
+                    this.buildGrid();
+                }
+            }
+        });
+
+        this.addDocked({
+            xtype: 'toolbar',
+            itemId: 'searchBar',
+            dock: 'top',
+            border: false,
+            padding: '0 0 10px 0',
+            items: this.getSearchBarItems()
+        });
+
+        this.buildGrid();
+
+        this.selectionCache = this.getInitialSelectedRecords() || [];
+    },
+    getStoreFilters: function() {
+        return this.storeFilters || [];
+    }
+});
 Ext.define("portfolio-drilldown-report", {
     extend: 'Rally.app.App',
     componentCls: 'app',
@@ -784,9 +848,13 @@ Ext.define("portfolio-drilldown-report", {
         return filterObj;
     },
     _launchChooser: function(){
+        var release = this.down('#cb-release').getRecord() || null;
+
         Ext.create('Rally.ui.dialog.ArtifactChooserDialog', {
             artifactTypes: this.portfolioItemTypes[1],
             autoShow: true,
+            release: release,
+            portfolioItemTypes: this.portfolioItemTypes,
             height: 500,
             title: 'Choose PortfolioItem',
             multiple: true,
@@ -824,7 +892,7 @@ Ext.define("portfolio-drilldown-report", {
             models: [this.portfolioItemTypes[1],this.portfolioItemTypes[0]],
             autoLoad: true,
             enableHierarchy: true,
-            parentTypes: [this.portfolioItemTypes[1]],
+            parentTypes: [this.portfolioItemTypes[1],this.portfolioItemTypes[0]],
             childFilters: childFilterHash,
             filters: filters
         }).then({
@@ -882,11 +950,17 @@ Ext.define("portfolio-drilldown-report", {
                         gridConfig: {
                             store: store,
                             columnCfgs: this._getColumnCfgs(),
-                            collapsed: false
+                            collapsed: false,
+                            listeners: {
+                                scope: this,
+                                load: function(ts,node){
+                                    node.expand(true);
+                                }
+                            }
                         },
                         height: this.getHeight()
                     });
-                this._expandNodes(gridboard);
+
             }
          });
 

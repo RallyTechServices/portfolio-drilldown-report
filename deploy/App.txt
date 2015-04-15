@@ -3,11 +3,11 @@
 <head>
     <title>Portfolio Drilldown Report</title>
     <!--  (c) 2015 Rally Software Development Corp.  All Rights Reserved. -->
-    <!--  Build Date: Mon Apr 06 2015 13:57:05 GMT-0600 (MDT) -->
+    <!--  Build Date: Tue Apr 14 2015 21:15:39 GMT-0700 (PDT) -->
     
     <script type="text/javascript">
-        var APP_BUILD_DATE = "Mon Apr 06 2015 13:57:05 GMT-0600 (MDT)";
-        var CHECKSUM = 25681768397;
+        var APP_BUILD_DATE = "Tue Apr 14 2015 21:15:39 GMT-0700 (PDT)";
+        var CHECKSUM = 26943796349;
     </script>
     
     <script type="text/javascript" src="/apps/2.0/sdk.js"></script>
@@ -692,6 +692,16 @@ Ext.override(Rally.data.wsapi.TreeStore, {
     }
 });
 
+Ext.override(Rally.ui.grid.TreeView,{
+    _expandHandler: function(node, children){
+        if (this.getTreeStore().getRootNode() !== node && children.length === 0){
+            this.refresh(); //treegrid freaks out when it tries to expand a node that has no children, so force a refresh
+            if (!this.getTreeStore().hasErrors()){
+                Rally.ui.notify.Notifier.showWarning({message:node.get('FormattedID') + ' may have children that do not meet the selected release criteria and are not included in this report.'});
+            }
+        }
+    }
+});
 
 Ext.override(Rally.ui.grid.plugin.TreeGridChildPager, {
     _storeHasMoreChildPages: function(parentRecord) {
@@ -735,6 +745,7 @@ Ext.define("portfolio-drilldown-report", {
         this.down('#criteria_box').add({
             itemId: 'cb-release',
             xtype: 'rallyreleasecombobox',
+            allowNoEntry: true,
             listeners: {
                 change: this._onReleaseChanged,
                 scope: this
@@ -759,9 +770,15 @@ Ext.define("portfolio-drilldown-report", {
     },
     _getChildFilter: function(cb){
         var filters = Ext.create('Rally.data.wsapi.Filter',{
-            property: 'Release.Name',
-            value: cb.getRecord().get('Name')
+            property: 'Release',
+            value: ""
         });
+        if (cb.getValue() && cb.getRecord()){
+            filters = Ext.create('Rally.data.wsapi.Filter',{
+                property: 'Release.Name',
+                value: cb.getRecord().get('Name')
+            });
+        }
         var filterObj = {};
         filterObj[this.portfolioItemTypes[1].toLowerCase()] = filters;
         return filterObj;
@@ -770,7 +787,7 @@ Ext.define("portfolio-drilldown-report", {
         Ext.create('Rally.ui.dialog.ArtifactChooserDialog', {
             artifactTypes: this.portfolioItemTypes[1],
             autoShow: true,
-            height: 250,
+            height: 500,
             title: 'Choose PortfolioItem',
             multiple: true,
             listeners: {
